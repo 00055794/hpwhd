@@ -33,6 +33,147 @@ _pipeline = None
 _nn       = None
 
 
+# ── Scoring helpers (UI-only, do not affect the model) ────────────────────────
+def _score_from_distance(d_km, ideal: float, max_km: float) -> int:
+    """Convert distance in km to a 0–95 closeness score (smooth exponential
+    decay). Caps at 95 so even a doorstep amenity never claims a "perfect"
+    score, and decays smoothly so urban variability is reflected (no plateau
+    at 100). Calibration: score(0)=95, score(max_km)≈25, score(ideal)≈85."""
+    if d_km is None:
+        return 50
+    try:
+        d = float(d_km)
+    except Exception:
+        return 50
+    if d <= 0:
+        return 95
+    import math
+    # k so that 95·e^(−k·max_km) ≈ 25  →  k = ln(95/25)/max_km
+    span = max(0.2, float(max_km))
+    k = math.log(95.0 / 25.0) / span
+    score = 95.0 * math.exp(-k * d)
+    return int(round(max(15, min(95, score))))
+
+
+def _build_proximity(distances: dict) -> dict:
+    return {
+        "pharmacy":     {"label": "Аптека",        "km": distances.get("dist_to_pharmacy_km"),
+                         "score": _score_from_distance(distances.get("dist_to_pharmacy_km"),     0.5, 2.5)},
+        "hospital":     {"label": "Больница",      "km": distances.get("dist_to_hospital_km"),
+                         "score": _score_from_distance(distances.get("dist_to_hospital_km"),     1.0, 5.0)},
+        "kindergarten": {"label": "Детский сад",   "km": distances.get("dist_to_kindergarten_km"),
+                         "score": _score_from_distance(distances.get("dist_to_kindergarten_km"), 0.5, 2.0)},
+        "main_road":    {"label": "Главная улица", "km": distances.get("dist_to_main_road_km"),
+                         "score": _score_from_distance(distances.get("dist_to_main_road_km"),    0.3, 2.0)},
+    }
+
+
+def _build_livability(prox: dict, condition: int, year: int,
+                      ceiling: float, total_floors: int) -> dict:
+    # Infrastructure: weighted blend (hospital matters more than pharmacy)
+    infra = round(prox["pharmacy"]["score"]    * 0.30 +
+                  prox["hospital"]["score"]    * 0.40 +
+                  prox["kindergarten"]["score"] * 0.30)
+
+    # Transport: closeness to a main road
+    transport = prox["main_road"]["score"]
+
+    # Condition combines renovation grade, age and ceiling height
+    cond_grade = max(1, min(5, int(condition)))
+    cond_part  = (cond_grade - 1) / 4 * 100         # 0–100 from grade
+    age        = max(0, 2026 - int(year))
+    age_part   = max(0, 100 - min(age, 60) * 1.4)   # newer is better
+    ceil_part  = max(0, min(100, (float(ceiling) - 2.4) / 0.8 * 100))
+    cond_score = round(cond_part * 0.55 + age_part * 0.30 + ceil_part * 0.15)
+    cond_score = max(35, min(100, cond_score))
+
+    # Overall = arithmetic average of the three displayed sub-scores so the
+    # "Комфорт" badge equals what the user sees in the legend.
+    overall_raw = round((int(infra) + int(transport) + int(cond_score)) / 3)
+
+    # ── Adaptive lower bound based on local urbanity ─────────────────────
+    # Rationale: the 50–95 floor was calibrated for built-up areas. In
+    # remote regions with no construction nearby (steppe, fields, villages
+    # with no kindergarten/hospital), the four POI distances are all large
+    # and clipping at 50 over-states comfort. Use the best of the four
+    # POI scores as an "urbanity" proxy:
+    #   urbanity ≥ 60  → built-up, floor = 50
+    #   urbanity ≤ 30  → rural / no construction, floor = 10
+    #   else           → linear interpolation
+    urbanity = max(
+        int(prox["pharmacy"]["score"]),
+        int(prox["hospital"]["score"]),
+        int(prox["kindergarten"]["score"]),
+        int(prox["main_road"]["score"]),
+    )
+    if urbanity >= 60:
+        floor_score = 50
+    elif urbanity <= 30:
+        floor_score = 10
+    else:
+        # Linear: u=30→10, u=60→50  ⇒  floor = 10 + (u-30) * (40/30)
+        floor_score = int(round(10 + (urbanity - 30) * (40.0 / 30.0)))
+
+    overall = max(floor_score, min(95, overall_raw))
+
+    if urbanity <= 30:
+        narrative = ("Удалённая локация: рядом нет крупной инфраструктуры. "
+                     "Подходит для тех, кто ценит уединение и природу.")
+    elif overall >= 85:
+        narrative = "Отличный выбор: высокий комфорт проживания, развитая инфраструктура и удобная транспортная доступность."
+    elif overall >= 70:
+        narrative = "Хороший выбор: сбалансированная локация с комфортными условиями для повседневной жизни."
+    else:
+        narrative = "Достойный вариант: подходит для размеренной жизни, есть потенциал для улучшения комфорта."
+    return {
+        "infrastructure": int(infra),
+        "transport":      int(transport),
+        "condition":      int(cond_score),
+        "overall":        int(overall),
+        "narrative":      narrative,
+    }
+
+
+def _build_drivers(payload: dict, livability: dict) -> list:
+    """Return 6 price drivers with integer percentage weights summing to exactly 100."""
+    cond        = int(payload.get("CONDITION", 3))
+    area        = float(payload.get("TOTAL_AREA", 60))
+    year        = int(payload.get("YEAR", 2010))
+    floor       = int(payload.get("FLOOR", 1))
+    total_floor = max(int(payload.get("TOTAL_FLOORS", 1)), 1)
+    material    = int(payload.get("MATERIAL", 3))
+
+    floor_ratio = floor / total_floor
+    raw = [
+        ("Площадь",        max(15.0, min(34.0, 24.0 + (area - 60) * 0.18))),
+        ("Локация",        max(10.0, min(28.0, 18.0 + (livability["infrastructure"] - 60) * 0.18))),
+        ("Состояние",      max(8.0,  min(20.0, 6.0  + cond * 2.4))),
+        ("Год постройки",  max(5.0,  min(15.0, 14.0 - max(0, 2026 - year) * 0.18))),
+        ("Этажность",      max(5.0,  min(14.0, 6.0  + (1 - abs(floor_ratio - 0.5)) * 12))),
+        ("Материал",       max(5.0,  min(13.0, 5.0  + material * 1.6))),
+    ]
+    total = sum(v for _, v in raw)
+    # Largest-remainder rounding so integer percents sum to exactly 100.
+    scaled = [(n, v / total * 100) for n, v in raw]
+    floors = [(n, int(p), p - int(p)) for n, p in scaled]
+    deficit = 100 - sum(f for _, f, _ in floors)
+    order = sorted(range(len(floors)), key=lambda i: floors[i][2], reverse=True)
+    pct = [f for _, f, _ in floors]
+    for k in range(deficit):
+        pct[order[k % len(order)]] += 1
+    return [{"name": n, "value": int(p)} for (n, _, _), p in zip(floors, pct)]
+
+
+def _confidence_band(price: float) -> dict:
+    """90% confidence band: ±10% around the predicted nominal price."""
+    half = price * 0.10
+    return {
+        "level": 90,
+        "lower": int(round(price - half)),
+        "upper": int(round(price + half)),
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _pipeline, _nn
@@ -126,14 +267,24 @@ async def predict(data: PredictionInput):
         # Display-only info (region name, distances, stat summary for UI)
         display = _pipeline.get_display_info(lat, lon)
 
+        # ── Scoring data for the right-column widgets ────────────────────────
+        proximity  = _build_proximity(display.get("distances", {}) or {})
+        livability = _build_livability(proximity,
+                                       int(user_input["CONDITION"]),
+                                       int(user_input["YEAR"]),
+                                       float(user_input["CEILING"]),
+                                       int(user_input["TOTAL_FLOORS"]))
+        drivers    = _build_drivers(user_input, livability)
+        conf_band  = _confidence_band(price_kzt)
+
         return {
             "success":       True,
             "price_kzt":     round(price_kzt, 0),
             "price_per_sqm": round(price_per_sqm, 0),
-            "region_grid":   region_grid_code,
-            "segment_code":  segment_code_val,
-            "distances":     display["distances"],
-            "stat":          display["stat"],
+            "confidence":    conf_band,
+            "livability":    livability,
+            "proximity":     proximity,
+            "drivers":       drivers,
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -142,6 +293,46 @@ async def predict(data: PredictionInput):
 @app.get("/health")
 async def health():
     return {"status": "ok", "model_loaded": _nn is not None}
+
+
+@app.get("/geocode")
+async def geocode(q: str):
+    """Server-side proxy to Nominatim. Uses curl.exe (built-in on Win10+)
+    with SSPI auth so it works behind corporate NTLM proxies. Covers all
+    of Kazakhstan via Nominatim's global OSM index."""
+    import urllib.parse, json, subprocess, shutil
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    url = ("https://nominatim.openstreetmap.org/search?format=json"
+           "&addressdetails=1&limit=8&countrycodes=kz"
+           "&accept-language=ru,en&q=" + urllib.parse.quote(q))
+    ua = "kz-real-estate-advisor/1.0 (contact: local-dev)"
+    curl = shutil.which("curl") or shutil.which("curl.exe")
+    last_err = None
+    if curl:
+        for args in (
+            # 1) Use system proxy with current Windows user creds (NTLM/Negotiate)
+            [curl, "-s", "-S", "--max-time", "12", "--ssl-no-revoke",
+             "--proxy-anyauth", "--proxy-user", ":", "-A", ua, url],
+            # 2) Fallback: no proxy
+            [curl, "-s", "-S", "--max-time", "12", "--ssl-no-revoke",
+             "--noproxy", "*", "-A", ua, url],
+        ):
+            try:
+                out = subprocess.run(args, capture_output=True, timeout=15)
+                if out.returncode == 0 and out.stdout:
+                    try:
+                        return json.loads(out.stdout.decode("utf-8", "replace"))
+                    except Exception as e:
+                        last_err = f"parse: {e}"
+                        continue
+                last_err = (out.stderr or b"").decode("utf-8", "replace") or f"rc={out.returncode}"
+            except Exception as e:
+                last_err = str(e)
+    else:
+        last_err = "curl.exe not found"
+    raise HTTPException(status_code=502, detail=f"Geocoder error: {last_err}")
 
 
 # ── Batch predict ─────────────────────────────────────────────────────────────

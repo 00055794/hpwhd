@@ -25,3 +25,4 @@ batch_results.json
 *_fact_vs_pred.xlsx
 *_calibrated*.xlsx
 eval_*.txt
+_geo_test*

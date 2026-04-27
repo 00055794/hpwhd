@@ -1,179 +1,163 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KZ Real Estate Price Estimator</title>
+  <title>ИИ-советник по недвижимости</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" />
-  <link rel="stylesheet" href="/static/css/style.css?v=20260424c" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260427v" />
 </head>
 <body>
 
 <header class="app-header">
-  <div class="header-title">KZ Real Estate Price Estimator</div>
-  <div class="header-caption">Predict apartment prices in KZT and view them on the map. Upload your file or use the form.</div>
+  <div class="header-title">ИИ-советник по недвижимости</div>
+  <div class="header-caption">Ориентировочная оценка квартиры и комфорта проживания на основе открытых рыночных данных. Не является официальной оценкой и не заменяет отчёт оценщика.</div>
 </header>
 
-<main class="two-col">
+<main class="layout">
 
-  <!-- LEFT: Single Prediction -->
-  <section class="col">
-
-    <details class="expander" id="map-expander">
-      <summary>Map</summary>
-      <div class="expander-body">
+  <section class="main-row">
+    <div class="left-col">
+      <div class="card map-card">
         <div id="single-map"></div>
       </div>
-    </details>
 
-    <div class="card">
-      <div class="form-2col">
-
-        <div class="sub-col">
-          <div class="form-group">
-            <label for="ROOMS">Rooms</label>
-            <input type="number" id="ROOMS" min="1" max="10" value="2" />
-          </div>
-          <div class="form-group">
-            <label for="TOTAL_AREA">Area m2</label>
-            <input type="number" id="TOTAL_AREA" step="0.1" min="10" max="1000" value="60" />
-          </div>
-          <div class="form-group">
-            <label for="FLOOR">Floor</label>
-            <input type="number" id="FLOOR" min="1" max="100" value="5" />
-          </div>
-          <div class="form-group">
-            <label for="TOTAL_FLOORS">Total Floors</label>
-            <input type="number" id="TOTAL_FLOORS" min="1" max="100" value="9" />
-          </div>
-          <div class="form-group">
-            <label for="CEILING">Ceiling m</label>
-            <input type="number" id="CEILING" step="0.1" min="2.0" max="5.0" value="2.7" />
-          </div>
+      <div class="card form-card">
+        <div class="form-grid">
+        <div class="form-group"><label for="ROOMS">Комнаты</label><input type="number" id="ROOMS" min="1" max="10" value="2" /></div>
+        <div class="form-group"><label for="TOTAL_AREA">Площадь, м²</label><input type="number" id="TOTAL_AREA" step="0.1" min="10" max="1000" value="60" /></div>
+        <div class="form-group"><label for="FLOOR">Этаж</label><input type="number" id="FLOOR" min="1" max="100" value="5" /></div>
+        <div class="form-group"><label for="TOTAL_FLOORS">Этажность дома</label><input type="number" id="TOTAL_FLOORS" min="1" max="100" value="9" /></div>
+        <div class="form-group"><label for="CEILING">Потолки, м</label><input type="number" id="CEILING" step="0.1" min="2.0" max="5.0" value="2.7" /></div>
+        <div class="form-group"><label for="YEAR">Год постройки</label><input type="number" id="YEAR" min="1950" max="2100" value="2015" /></div>
+        <div class="form-group"><label for="MATERIAL">Материал</label>
+          <select id="MATERIAL">
+            <option value="3" selected>Монолитный</option>
+            <option value="2">Панельный</option>
+            <option value="4">Кирпичный</option>
+            <option value="1">Иной</option>
+          </select>
         </div>
-
-        <div class="sub-col">
-          <div class="form-group">
-            <label for="YEAR">Year</label>
-            <input type="number" id="YEAR" min="1950" max="2100" value="2015" />
-          </div>
-          <div class="form-group">
-            <label for="MATERIAL">Material</label>
-            <select id="MATERIAL">
-              <option value="3" selected>Monolithic (монолитный)</option>
-              <option value="2">Panel (панельный)</option>
-              <option value="4">Brick (кирпичный)</option>
-              <option value="1">Other (иной)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="FURNITURE">Furniture</label>
-            <select id="FURNITURE">
-              <option value="1">No furniture</option>
-              <option value="2">Partial</option>
-              <option value="3" selected>Full</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="CONDITION">Condition</label>
-            <select id="CONDITION">
-              <option value="1">Rough / Open plan (черновая)</option>
-              <option value="2">Needs renovation (требует)</option>
-              <option value="3">Neat / Average (аккуратный)</option>
-              <option value="4">Good (хорошее)</option>
-              <option value="5" selected>Fresh renovation (свежий)</option>
-            </select>
-          </div>
+        <div class="form-group"><label for="FURNITURE">Мебель</label>
+          <select id="FURNITURE">
+            <option value="1">Без мебели</option>
+            <option value="2">Частично</option>
+            <option value="3" selected>Полностью</option>
+          </select>
         </div>
-
+        <div class="form-group"><label for="CONDITION">Состояние</label>
+          <select id="CONDITION">
+            <option value="1">Черновая</option>
+            <option value="2">Требует ремонта</option>
+            <option value="3">Среднее</option>
+            <option value="4">Хорошее</option>
+            <option value="5" selected>Свежий ремонт</option>
+          </select>
+        </div>
+        <div class="form-group"><label for="LATITUDE">Широта</label><input type="number" id="LATITUDE" step="0.000001" min="40" max="55" value="43.256700" /></div>
+        <div class="form-group"><label for="LONGITUDE">Долгота</label><input type="number" id="LONGITUDE" step="0.000001" min="46" max="87" value="76.928600" /></div>
       </div>
 
-      <div class="form-2col coords-row">
-        <div class="form-group">
-          <label for="LATITUDE">Latitude</label>
-          <input type="number" id="LATITUDE" step="0.000001" min="40" max="55" value="43.256700" />
-        </div>
-        <div class="form-group">
-          <label for="LONGITUDE">Longitude</label>
-          <input type="number" id="LONGITUDE" step="0.000001" min="46" max="87" value="76.928600" />
+      <button id="predict-btn" class="btn-primary btn-full" onclick="runPredict()">Оценить квартиру</button>
+
+      <div id="loading-card" class="loading-card hidden">
+        <div class="spinner"></div><span class="loading-text">Считаем оценку...</span>
+      </div>
+      <div id="error-card" class="error-card hidden"><span id="error-msg"></span></div>
+    </div>
+
+    </div>
+
+    <aside class="right-col">
+      <div class="widget price-widget hidden" id="price-widget">
+        <div class="widget-title">Ориентир рыночной стоимости</div>
+        <div class="price-value" id="price-value">—</div>
+        <div class="price-sub" id="price-sub"></div>
+        <div class="conf-band">
+          <div class="conf-track">
+            <div class="conf-fill" id="conf-fill"></div>
+            <div class="conf-marker" id="conf-marker"></div>
+          </div>
+          <div class="conf-text" id="conf-text"></div>
         </div>
       </div>
 
-      <button id="predict-btn" class="btn-primary btn-full" onclick="runPredict()">
-        Predict Price
-      </button>
-    </div>
-
-    <div id="loading-card" class="loading-card hidden">
-      <div class="spinner"></div>
-      <span class="loading-text">Calculating...</span>
-    </div>
-
-    <div id="error-card" class="error-card hidden">
-      <span id="error-msg"></span>
-    </div>
-
-    <div id="result-section" class="hidden">
-      <div class="success-banner" id="price-banner"></div>
-      <details class="expander">
-        <summary>Details</summary>
-        <div class="expander-body">
-          <div class="table-scroll" id="details-table-wrap"></div>
+      <div class="widget liv-widget hidden" id="liv-widget">
+        <div class="liv-row">
+          <div class="liv-text" id="liv-text"></div>
+          <div class="share-row" id="share-row" title="Поделиться оценкой">
+            <button class="share-btn" data-share="whatsapp" title="WhatsApp" aria-label="WhatsApp">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.05 4.91A10 10 0 0 0 4.1 18.21L3 22l3.9-1.02a10 10 0 0 0 12.15-16.07Zm-7.06 14.6a8.4 8.4 0 0 1-4.27-1.17l-.31-.18-2.31.6.62-2.25-.2-.32a8.4 8.4 0 1 1 6.47 3.32Zm4.6-6.27c-.25-.13-1.49-.74-1.72-.83-.23-.08-.4-.13-.57.13-.16.25-.65.83-.8 1-.15.16-.3.18-.55.06-.25-.13-1.07-.4-2.04-1.27-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.3.38-.45.13-.15.16-.25.25-.42.08-.16.04-.31-.02-.44-.06-.13-.57-1.36-.78-1.86-.2-.49-.41-.42-.57-.43h-.49c-.16 0-.42.06-.65.31-.22.25-.86.84-.86 2.05 0 1.21.88 2.38 1 2.55.13.16 1.74 2.66 4.22 3.73.59.25 1.05.4 1.41.51.59.19 1.13.16 1.55.1.47-.07 1.49-.61 1.7-1.2.21-.59.21-1.1.15-1.2-.06-.1-.23-.16-.49-.29Z"/></svg>
+            </button>
+            <button class="share-btn" data-share="instagram" title="Instagram" aria-label="Instagram">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button class="share-btn" data-share="copy" title="Скопировать ссылку" aria-label="Скопировать ссылку">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5"/></svg>
+            </button>
+          </div>
         </div>
-      </details>
-    </div>
+        <div class="share-toast hidden" id="share-toast">Ссылка скопирована</div>
+      </div>
 
-  </section>
-
-  <!-- RIGHT: Batch Upload -->
-  <section class="col">
-
-    <div class="card upload-card">
-      <label class="upload-zone" id="upload-zone">
-        <div class="upload-title">Upload CSV / Excel</div>
-        <div class="upload-hint">Drag and drop or click to browse</div>
-        <input type="file" id="batch-file" accept=".csv,.xlsx" onchange="handleBatchUpload()" />
-      </label>
-    </div>
-
-    <div class="btn-row">
-      <button id="dl-csv-btn" class="btn-secondary" disabled onclick="downloadCSV()">Download CSV</button>
-      <button id="dl-xlsx-btn" class="btn-secondary" disabled onclick="downloadXLSX()">Download Excel</button>
-    </div>
-
-    <div id="batch-loading" class="loading-card hidden">
-      <div class="spinner"></div>
-      <span class="loading-text">Processing batch...</span>
-    </div>
-
-    <div id="batch-results" class="hidden">
-      <div class="success-banner" id="batch-banner"></div>
-      <div class="table-scroll" id="batch-table-wrap"></div>
-      <details class="expander" id="batch-map-expander">
-        <summary>View on Map</summary>
-        <div class="expander-body">
-          <div id="batch-map"></div>
-        </div>
-      </details>
-    </div>
-
-    <details class="expander">
-      <summary>Download Template</summary>
-      <div class="expander-body">
-        <div class="btn-row">
-          <a href="/template/csv"  class="btn-secondary">CSV</a>
-          <a href="/template/xlsx" class="btn-secondary">Excel</a>
+      <div class="card insight-card hidden" id="insights-card">
+        <div class="insight-split">
+          <div class="insight-block">
+            <div class="widget-title">Почему такая цена</div>
+            <div class="combo-flex compact">
+              <div class="chart-wrap-md"><canvas id="drivers-chart"></canvas></div>
+              <div class="combo-legend" id="drivers-legend"></div>
+            </div>
+          </div>
+          <div class="insight-vline"></div>
+          <div class="insight-block">
+            <div class="widget-title">Комфорт проживания и что рядом</div>
+            <div class="combo-flex compact">
+              <div class="chart-wrap-md"><canvas id="comfort-chart"></canvas></div>
+              <div class="combo-legend" id="comfort-legend"></div>
+            </div>
+            <div class="prox-strip prox-strip-compact" id="prox-strip"></div>
+          </div>
         </div>
       </div>
-    </details>
 
+      <div class="card batch-card batch-compact">
+        <div class="batch-head">
+          <div class="widget-title">Пакетная оценка</div>
+          <label class="upload-zone upload-zone-inline" id="upload-zone">
+            <span class="upload-title">Загрузить CSV или Excel</span>
+            <span class="upload-hint">Перетащите или нажмите</span>
+            <input type="file" id="batch-file" accept=".csv,.xlsx" onchange="handleBatchUpload()" />
+          </label>
+        </div>
+        <div class="batch-row-line batch-row-single">
+          <span class="batch-row-label">Шаблоны:</span>
+          <a href="/template/csv"  class="btn-ghost btn-xs">CSV</a>
+          <a href="/template/xlsx" class="btn-ghost btn-xs">Excel</a>
+          <span class="batch-row-sep"></span>
+          <span class="batch-row-label">Скачать:</span>
+          <button id="dl-csv-btn"  class="btn-ghost btn-xs" disabled onclick="downloadCSV()">CSV</button>
+          <button id="dl-xlsx-btn" class="btn-ghost btn-xs" disabled onclick="downloadXLSX()">Excel</button>
+        </div>
+
+        <div id="batch-loading" class="loading-card hidden">
+          <div class="spinner"></div><span class="loading-text">Обрабатываем файл...</span>
+        </div>
+
+        <div id="batch-results" class="hidden">
+          <div class="batch-banner" id="batch-banner"></div>
+          <div class="table-scroll" id="batch-table-wrap"></div>
+        </div>
+      </div>
+    </aside>
   </section>
 
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js"></script>
-<script src="/static/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/app.js?v=20260427v"></script>
 </body>
 </html>

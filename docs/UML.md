@@ -9,7 +9,12 @@ uvicorn :8000 внутри Universal DMZ Halyk Bank).
 
 ---
 
+> Готовые изображения диаграмм лежат в `docs/img/` (PNG, сгенерированы из
+> Mermaid-блоков ниже).
+
 ## 1. C4 Container — компоненты и обмен данными
+
+![C4 Container](img/c4_container.png)
 
 ```mermaid
 flowchart TB
@@ -35,6 +40,8 @@ flowchart TB
 ---
 
 ## 2. Sequence — сценарий одного прогноза `/predict`
+
+![Sequence](img/sequence.png)
 
 ```mermaid
 sequenceDiagram
@@ -63,6 +70,8 @@ sequenceDiagram
 ---
 
 ## 3. Component / Class — ключевые классы
+
+![Class](img/class.png)
 
 ```mermaid
 classDiagram
@@ -115,6 +124,8 @@ classDiagram
 ---
 
 ## 4. Deployment — среда выполнения (ИС / адрес сервера)
+
+![Deployment](img/deployment.png)
 
 ```mermaid
 flowchart LR

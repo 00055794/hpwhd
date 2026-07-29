@@ -144,11 +144,31 @@ class FeaturePipeline:
         if pi_path.exists():
             with open(pi_path, "r", encoding="utf-8") as f:
                 self._price_index: dict = json.load(f)
-            self._pi_keys = sorted(self._price_index.keys())
-            # Default "current" quarter = today (for single /predict with no CREATED_AT)
+#changed part in 07.2026:
+            ##self._pi_keys = sorted(self._price_index.keys())
+            ### Default "current" quarter = today (for single /predict with no CREATED_AT)
+            ##today = datetime.now()
+            ##self._default_quarter = f"{today.year}Q{((today.month - 1) // 3) + 1}"
+            ##pi_block = self._price_index_block(self._default_quarter)
+
+            #price_index.json contains SYNTHETIC values past 2026Q2:
+            #2026Q3 == 2026Q2**2 / 2026Q1 (bit-exact one-step momentum carry)
+            #2026Q4 == 2026Q3 (flat carry > index_momentum_3m == 0.0)
+            #2012Q1..Q3 == the same scalar (backward fill, before the data start)
+            #Serving a fabricated deflator shifts every prediction. Clamp to the last 
+            #quarter backed by observed data; this self-heals when the file is refreshed. 
+            SYNTHETIC = set(self._price_index.pop("_synthetic", []))
+            self._pi_keys = sorted(k for k in self._price_index if k not in SYNTHETIC)
             today = datetime.now()
-            self._default_quarter = f"{today.year}Q{((today.month - 1) // 3) + 1}"
+            today_q = f"{today.year}Q{((today.month - 1) // 3) +1}"
+            self._default_quarter = min(today_q, self._pi_keys[-1]) # lex == chrono for YYYYQN
+            if self._default_quarter != today_q:
+                print(f"FeaturePipeline: WARNING wall-clock {today_q} is past the last observed "
+                      f"index quarter {self._pi_keys[-1]}, clamping. Refresh price_index.json "
+                      f"and re-fit region_calibration.json.")
             pi_block = self._price_index_block(self._default_quarter)
+#changed part in 07.2026.            
+
             self._price_index_current = pi_block["price_index_current"]
             self._index_momentum_3m   = pi_block["index_momentum_3m"]
             self._index_momentum_yoy  = pi_block["index_momentum_yoy"]
